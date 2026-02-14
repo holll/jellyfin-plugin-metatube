@@ -87,26 +87,17 @@ public class OrganizeMetadataTask : IScheduledTask
 
             try
             {
-                switch (HasEmbeddedChineseSubtitle(item.FileNameWithoutExtension) ||
-                        HasExternalChineseSubtitle(item.Path))
-                {
-                    // Add `ChineseSubtitle` genre.
-                    case true when !genres.Contains(ChineseSubtitle):
-                    {
-                        genres.Add(ChineseSubtitle);
-                        if (Plugin.Instance.Configuration.EnableBadges)
-                            await SetPrimaryImage(item, Plugin.Instance.Configuration.BadgeUrl, cancellationToken);
-                        break;
-                    }
-                    // Remove `ChineseSubtitle` genre.
-                    case false when genres.Contains(ChineseSubtitle):
-                    {
-                        genres.RemoveAll(s => s.Equals(ChineseSubtitle));
-                        if (Plugin.Instance.Configuration.EnableBadges)
-                            await SetPrimaryImage(item, string.Empty, cancellationToken);
-                        break;
-                    }
-                }
+                var hasUcTag = HasTag(item.FileNameWithoutExtension, "UC");
+                var hasChineseSubtitle = hasUcTag ||
+                                         HasEmbeddedChineseSubtitle(item.FileNameWithoutExtension) ||
+                                         HasExternalChineseSubtitle(item.Path);
+                var hasUncensoredCrack = hasUcTag || HasTag(item.FileNameWithoutExtension, "U");
+
+                UpdateGenre(genres, ChineseSubtitle, hasChineseSubtitle);
+                UpdateGenre(genres, UncensoredCrack, hasUncensoredCrack);
+
+                if (Plugin.Instance.Configuration.EnableBadges)
+                    await SetPrimaryImage(item, BuildBadge(item.FileNameWithoutExtension, item.Path), cancellationToken);
             }
             catch (Exception e)
             {
@@ -144,9 +135,15 @@ public class OrganizeMetadataTask : IScheduledTask
     #region Helper
 
     private const string ChineseSubtitle = "中文字幕";
+    private const string UncensoredCrack = "无码破解";
+    private const string UncensoredBadge = "wuma.png";
+    private const string ChineseUncensoredBadge = "zhongwen.png";
 
     private static bool HasTag(string filename, string tag)
     {
+        if (string.IsNullOrWhiteSpace(filename) || string.IsNullOrWhiteSpace(tag))
+            return false;
+
         var r = new Regex(@"[-_\s]", RegexOptions.Compiled);
         return r.Split(filename).Contains(tag, StringComparer.OrdinalIgnoreCase);
     }
@@ -156,12 +153,39 @@ public class OrganizeMetadataTask : IScheduledTask
         return tags.Any(tag => HasTag(filename, tag));
     }
 
+    private static void UpdateGenre(List<string> genres, string genre, bool shouldInclude)
+    {
+        switch (shouldInclude)
+        {
+            case true when !genres.Contains(genre):
+                genres.Add(genre);
+                break;
+            case false when genres.Contains(genre):
+                genres.RemoveAll(s => s.Equals(genre));
+                break;
+        }
+    }
+
     private static bool HasEmbeddedChineseSubtitle(string filename)
     {
         if (string.IsNullOrWhiteSpace(filename))
             return false;
 
-        return filename.Contains(ChineseSubtitle) || HasTag(filename, "C", "UC", "ch");
+        return filename.Contains(ChineseSubtitle) || HasTag(filename, "C", "ch");
+    }
+
+    private static string BuildBadge(string filename, string path)
+    {
+        var badges = new List<string>();
+        if (HasEmbeddedChineseSubtitle(filename) || HasExternalChineseSubtitle(path))
+            badges.Add(Plugin.Instance.Configuration.BadgeUrl);
+
+        if (HasTag(filename, "UC"))
+            badges.Add(ChineseUncensoredBadge);
+        else if (HasTag(filename, "U"))
+            badges.Add(UncensoredBadge);
+
+        return string.Join(",", badges.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.OrdinalIgnoreCase));
     }
 
     private static bool HasExternalChineseSubtitle(string path)
