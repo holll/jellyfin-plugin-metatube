@@ -137,7 +137,7 @@ public class OrganizeMetadataTask : IScheduledTask
     private const string ChineseSubtitle = "中文字幕";
     private const string UncensoredCrack = "无码破解";
     private const string UncensoredBadge = "wuma.png";
-    private const string ChineseUncensoredBadge = "zhongwen.png";
+    private const string ChineseUncensoredBadge = "zimuwuma.png";
 
     private static bool HasTag(string filename, string tag)
     {
