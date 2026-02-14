@@ -87,26 +87,22 @@ public class OrganizeMetadataTask : IScheduledTask
 
             try
             {
-                switch (HasEmbeddedChineseSubtitle(item.FileNameWithoutExtension) ||
-                        HasExternalChineseSubtitle(item.Path))
+                var hasChineseSubtitle = HasEmbeddedChineseSubtitle(item.FileNameWithoutExtension) ||
+                                         HasExternalChineseSubtitle(item.Path);
+                switch (hasChineseSubtitle)
                 {
                     // Add `ChineseSubtitle` genre.
                     case true when !genres.Contains(ChineseSubtitle):
-                    {
                         genres.Add(ChineseSubtitle);
-                        if (Plugin.Instance.Configuration.EnableBadges)
-                            await SetPrimaryImage(item, Plugin.Instance.Configuration.BadgeUrl, cancellationToken);
                         break;
-                    }
                     // Remove `ChineseSubtitle` genre.
                     case false when genres.Contains(ChineseSubtitle):
-                    {
                         genres.RemoveAll(s => s.Equals(ChineseSubtitle));
-                        if (Plugin.Instance.Configuration.EnableBadges)
-                            await SetPrimaryImage(item, string.Empty, cancellationToken);
                         break;
-                    }
                 }
+
+                if (Plugin.Instance.Configuration.EnableBadges)
+                    await SetPrimaryImage(item, BuildBadge(item.FileNameWithoutExtension, item.Path), cancellationToken);
             }
             catch (Exception e)
             {
@@ -144,6 +140,8 @@ public class OrganizeMetadataTask : IScheduledTask
     #region Helper
 
     private const string ChineseSubtitle = "中文字幕";
+    private const string UncensoredBadge = "wuma.png";
+    private const string ChineseUncensoredBadge = "zhongwen.png";
 
     private static bool HasTag(string filename, string tag)
     {
@@ -161,7 +159,21 @@ public class OrganizeMetadataTask : IScheduledTask
         if (string.IsNullOrWhiteSpace(filename))
             return false;
 
-        return filename.Contains(ChineseSubtitle) || HasTag(filename, "C", "UC", "ch");
+        return filename.Contains(ChineseSubtitle) || HasTag(filename, "C", "ch");
+    }
+
+    private static string BuildBadge(string filename, string path)
+    {
+        var badges = new List<string>();
+        if (HasEmbeddedChineseSubtitle(filename) || HasExternalChineseSubtitle(path))
+            badges.Add(Plugin.Instance.Configuration.BadgeUrl);
+
+        if (HasTag(filename, "UC"))
+            badges.Add(ChineseUncensoredBadge);
+        else if (HasTag(filename, "U"))
+            badges.Add(UncensoredBadge);
+
+        return string.Join(",", badges.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.OrdinalIgnoreCase));
     }
 
     private static bool HasExternalChineseSubtitle(string path)
