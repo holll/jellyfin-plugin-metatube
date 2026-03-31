@@ -251,7 +251,7 @@ public class OrganizeMetadataTask : IScheduledTask
         };
     }
 
-    private static string GetBadgeUrl(this BadgeTag tag)
+    private static string GetBadgeUrl(BadgeTag tag)
     {
         return tag switch
         {
