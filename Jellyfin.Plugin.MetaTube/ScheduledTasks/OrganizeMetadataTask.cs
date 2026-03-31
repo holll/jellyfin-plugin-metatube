@@ -87,25 +87,24 @@ public class OrganizeMetadataTask : IScheduledTask
 
             try
             {
-                switch (HasEmbeddedChineseSubtitle(item.FileNameWithoutExtension) ||
-                        HasExternalChineseSubtitle(item.Path))
+                var badge = DetectBadgeTag(item);
+                if (badge != BadgeTag.None)
                 {
-                    // Add `ChineseSubtitle` genre.
-                    case true when !genres.Contains(ChineseSubtitle):
+                    var gener = GetGenreName(badge);
+                    // Add genre.
+                    if (!genres.Contains(gener))
                     {
-                        genres.Add(ChineseSubtitle);
+                        genres.Add(gener);
                         if (Plugin.Instance.Configuration.EnableBadges)
-                            await SetPrimaryImage(item, Plugin.Instance.Configuration.BadgeUrl, cancellationToken);
-                        break;
+                            await SetPrimaryImage(item, GetBadgeUrl(badge), cancellationToken);
+                        
                     }
-                    // Remove `ChineseSubtitle` genre.
-                    case false when genres.Contains(ChineseSubtitle):
-                    {
-                        genres.RemoveAll(s => s.Equals(ChineseSubtitle));
-                        if (Plugin.Instance.Configuration.EnableBadges)
-                            await SetPrimaryImage(item, string.Empty, cancellationToken);
-                        break;
-                    }
+                }
+                else
+                {
+                    genres.RemoveAll(s => s.Equals(ChineseSubtitle) || s.Equals(ChineseSubtitleUncensored) || s.Equals(Uncensored));
+                    if (Plugin.Instance.Configuration.EnableBadges)
+                        await SetPrimaryImage(item, string.Empty, cancellationToken);
                 }
             }
             catch (Exception e)
@@ -145,6 +144,11 @@ public class OrganizeMetadataTask : IScheduledTask
 
     private const string ChineseSubtitle = "中文字幕";
 
+    private const string Uncensored = "无码破解";
+
+    private const string ChineseSubtitleUncensored = "中文无码";
+
+    
     private static bool HasTag(string filename, string tag)
     {
         var r = new Regex(@"[-_\s]", RegexOptions.Compiled);
@@ -192,6 +196,70 @@ public class OrganizeMetadataTask : IScheduledTask
             Path = ApiClient.GetPrimaryImageApiUrl(m.Provider, m.Id, pid.Position ?? -1, badge),
             Type = ImageType.Primary
         }, 0);
+    }
+
+
+    enum BadgeTag
+    {
+        C,
+        UC,
+        U,
+        None,
+    }
+
+    /// <summary>
+    /// 检测BadgeTag
+    /// </summary>
+    private static BadgeTag DetectBadgeTag(BaseItem item)
+    {
+        var filename = item.FileNameWithoutExtension;
+        if (string.IsNullOrWhiteSpace(filename))
+            return BadgeTag.None;
+
+        // 检查是否有外挂字幕文件
+        bool hasSubtitleFile = HasExternalChineseSubtitle(item.Path);
+
+
+        if (HasTag(filename, "UC") || (HasTag(filename, "U") && hasSubtitleFile) || filename.Contains(ChineseSubtitleUncensored))
+        {
+            return BadgeTag.UC;
+        }
+
+
+        if (HasTag(filename, "U") || filename.Contains(Uncensored))
+        {
+            return BadgeTag.U;
+        }
+
+        if (hasSubtitleFile || HasTag(filename, "C") || filename.Contains(ChineseSubtitle))
+        {
+            return BadgeTag.C;
+        }
+
+        return BadgeTag.None;
+    }
+
+    private static string GetGenreName(BadgeTag tag)
+    {
+        return tag switch
+        {
+            BadgeTag.UC => ChineseSubtitleUncensored,
+            BadgeTag.U => Uncensored,
+            BadgeTag.C => ChineseSubtitle,
+            BadgeTag.None => String.Empty,
+            _ => String.Empty
+        };
+    }
+
+    private static string GetBadgeUrl(BadgeTag tag)
+    {
+        return tag switch
+        {
+            BadgeTag.UC => Plugin.Instance.Configuration.UCBadgeUrl, 
+            BadgeTag.U => Plugin.Instance.Configuration.UBadgeUrl, 
+            BadgeTag.C => Plugin.Instance.Configuration.BadgeUrl, 
+            _ => string.Empty
+        };
     }
 
     #endregion
